@@ -1,65 +1,183 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ตรวจจับเสียงแบบมินิมอล</title>
-  <style>
-    body {
-      background: #f5f7fa;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      color: #333;
-      display: flex; flex-direction: column; justify-content: center; align-items: center;
-      min-height: 100vh; margin: 0; padding: 20px; text-align: center;
-    }
-    h1 { font-weight: 600; margin-bottom: 10px; color: #007acc; }
-    #dbValue { font-size: 4rem; font-weight: 700; margin: 20px 0; color: #444; }
-    #alert { color: #d9534f; font-weight: 700; font-size: 1.5rem; height: 2em; margin-top: 10px; }
-    .row { display:flex; gap:12px; align-items:center; justify-content:center; flex-wrap:wrap; }
-    .badge { padding:6px 10px; border-radius:999px; font-weight:600; }
-    .safe { background:#e6f7ee; color:#14864a; border:1px solid #bce8d1; }
-    .danger { background:#fde8e8; color:#c62828; border:1px solid #f5b7b7; }
-    .muted { color:#777 }
-    button {
-      margin-top:10px; padding:8px 14px; border:1px solid #ddd; background:#fff;
-      border-radius:8px; cursor:pointer; font-weight:600;
-    }
-    button:hover { border-color:#bbb; }
-    footer { position: fixed; bottom: 10px; font-size: 0.8rem; color: #999; }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ตรวจจับระดับเสียง (iOS Safe)</title>
+<style>
+  body{margin:0;background:#f5f7fa;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#111;display:grid;place-items:center;min-height:100vh}
+  .card{width:min(720px,94vw);background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.08);padding:24px;display:grid;gap:12px}
+  h1{margin:0 0 4px;color:#1565c0}
+  #db{font-size:clamp(40px,10vw,80px);font-weight:800;text-align:center}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center}
+  .badge{padding:6px 10px;border-radius:999px;font-weight:700;border:1px solid}
+  .safe{color:#14864a;border-color:#bce8d1;background:#e6f7ee}
+  .danger{color:#c62828;border-color:#f5b7b7;background:#fde8e8}
+  button{padding:10px 14px;border-radius:10px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-weight:700}
+  button:disabled{opacity:.6;cursor:not-allowed}
+  #log{background:#0b1222;color:#e5e7eb;font:12px/1.45 ui-monospace,Consolas,monospace;border-radius:10px;padding:10px;max-height:150px;overflow:auto;white-space:pre-wrap}
+</style>
 </head>
 <body>
-  <h1>ตรวจจับระดับเสียง</h1>
+  <div class="card">
+    <h1>ตรวจจับระดับเสียง</h1>
+    <div id="db">-- dB --</div>
 
-  <div id="dbValue">-- dB --</div>
+    <div class="row">
+      <span id="status" class="badge safe">ปลอดภัย</span>
+      <span id="time" class="badge" style="border-color:#e5e7eb;background:#f8fafc;color:#334155">
+        เวลาสะสมในโซนอันตราย: 00:00
+      </span>
+    </div>
 
-  <div class="row">
-    <span id="status" class="badge safe">ปลอดภัย</span>
-    <span id="dangerTime" class="muted">เวลาสะสมในโซนอันตราย: 00:00</span>
+    <div class="row">
+      <button id="start">เริ่มวัด (iOS ต้องกด)</button>
+      <button id="stop" disabled>หยุด</button>
+      <button id="reset">รีเซ็ตเวลาอันตราย</button>
+    </div>
+
+    <div id="msg" style="text-align:center;color:#c62828;font-weight:700"></div>
+    <div id="log"></div>
+    <small class="muted">
+      ถ้าไม่ขึ้นหน้าต่างขอสิทธิ์ไมค์: Settings → Safari → Advanced → Website Data → (ล้าง) หรือ
+      Settings → Safari → Camera & Microphone → Allow / Website Settings → Microphone: Allow
+    </small>
   </div>
 
-  <div id="alert"></div>
+<script>
+(() => {
+  const threshold = -30; // ปรับเกณฑ์ตามต้องการ
+  const dbEl = document.getElementById('db');
+  const statusEl = document.getElementById('status');
+  const timeEl = document.getElementById('time');
+  const startBtn = document.getElementById('start');
+  const stopBtn = document.getElementById('stop');
+  const resetBtn = document.getElementById('reset');
+  const msgEl = document.getElementById('msg');
+  const logEl = document.getElementById('log');
 
-  <button id="resetBtn">รีเซ็ตเวลาโซนอันตราย</button>
+  let audioCtx, analyser, source, stream;
+  let rafId = null;
+  let running = false;
 
-  <footer>© 2025 By Dev iphone </footer>
+  // ตัวจับเวลาโซนอันตราย
+  let inDanger = false;
+  let dangerAccumMs = 0;
+  let lastDangerStart = null;
 
-  <script>
-    const dbDisplay   = document.getElementById('dbValue');
-    const alertDisplay= document.getElementById('alert');
-    const statusEl    = document.getElementById('status');
-    const dangerTimeEl= document.getElementById('dangerTime');
-    const resetBtn    = document.getElementById('resetBtn');
+  const L = (...a) => { const t = a.join(' '); logEl.textContent += t + '\n'; console.log(t); };
 
-    const threshold = -30; // เกณฑ์โซนอันตราย (dB) ปรับได้
+  const fmt = (ms) => {
+    const sec = Math.floor(ms/1000);
+    const h = Math.floor(sec/3600);
+    const m = Math.floor((sec%3600)/60);
+    const s = sec%60;
+    return (h?String(h).padStart(2,'0')+':':'') + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  };
 
-    // ตัวจับเวลาสะสม
-    let inDanger = false;
-    let dangerAccumMs = 0;    // เวลาอันตรายสะสม (มิลลิวินาที)
-    let lastDangerStart = null;
+  function updateDanger(now, db){
+    if (db > threshold) {
+      if (!inDanger) {
+        inDanger = true; lastDangerStart = now;
+        statusEl.textContent = 'อันตราย'; statusEl.className = 'badge danger';
+      } else {
+        dangerAccumMs += (now - lastDangerStart);
+        lastDangerStart = now;
+      }
+    } else {
+      if (inDanger) { dangerAccumMs += (now - lastDangerStart); }
+      inDanger = false;
+      statusEl.textContent = 'ปลอดภัย'; statusEl.className = 'badge safe';
+    }
+    timeEl.textContent = 'เวลาสะสมในโซนอันตราย: ' + fmt(dangerAccumMs);
+  }
 
-    function fmt(ms){
-      const totalSec = Math.floor(ms / 1000);
-      const h = Math.floor(totalSec / 3600);
-      const m = Math.floor((totalSec % 3600) / 60);
-      const s = totalSec % 60;
+  function loop(){
+    if (!running) return;
+    const N = 1024;
+    const arr = new Float32Array(N);
+    analyser.getFloatTimeDomainData(arr);
+
+    let sum = 0;
+    for (let i=0;i<N;i++){ const v = arr[i]; sum += v*v; }
+    const rms = Math.sqrt(sum / N);       // 0..1
+    const db  = rms > 0 ? 20*Math.log10(rms) : -90; // dBFS (ลบเสมอ)
+
+    dbEl.textContent = db.toFixed(1) + ' dB';
+    updateDanger(performance.now(), db);
+
+    rafId = requestAnimationFrame(loop);
+  }
+
+  async function ensureResumed(){
+    try{
+      if (audioCtx && audioCtx.state === 'suspended'){
+        await audioCtx.resume();
+        L('AudioContext resumed');
+      }
+    }catch(e){ L('resume error:', e.name, e.message); }
+  }
+
+  async function start(){
+    msgEl.textContent = '';
+    try{
+      if (location.protocol !== 'https:'){
+        msgEl.textContent = 'ต้องใช้ผ่าน HTTPS (Pages ใช้ https อยู่แล้ว)';
+      }
+
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation:false, noiseSuppression:false, autoGainControl:false
+        }
+      });
+      L('got stream');
+
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      await ensureResumed();
+
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+
+      source = audioCtx.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      running = true;
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+
+      loop();
+    }catch(err){
+      msgEl.textContent = '❌ ใช้ไมโครโฟนไม่ได้: ' + (err.name || '') + ' ' + (err.message || '');
+      L('getUserMedia error:', err.name, err.message);
+    }
+  }
+
+  function stop(){
+    running = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (source) { try{ source.disconnect(); }catch{} }
+    if (analyser) { try{ analyser.disconnect?.(); }catch{} }
+    if (stream) { stream.getTracks().forEach(t => t.stop()); }
+    if (audioCtx) { try{ audioCtx.close(); }catch{} }
+    audioCtx = analyser = source = stream = null;
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    L('stopped');
+  }
+
+  // iOS: resume เมื่อกลับหน้า
+  document.addEventListener('visibilitychange', ensureResumed, false);
+  // iOS: บางครั้งต้อง bind กับ touchstart ด้วย
+  window.addEventListener('touchstart', ensureResumed, {passive:true});
+
+  startBtn.addEventListener('click', start);
+  stopBtn.addEventListener('click', stop);
+  resetBtn.addEventListener('click', () => {
+    dangerAccumMs = 0;
+    if (inDanger) lastDangerStart = performance.now();
+    timeEl.textContent = 'เวลาสะสมในโซนอันตราย: ' + fmt(dangerAccumMs);
+  });
+})();
+</script>
+</body>
+</html>
