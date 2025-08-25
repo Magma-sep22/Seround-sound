@@ -1,149 +1,182 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Noise Pollution Monitor</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: "Segoe UI", sans-serif;
-      background: #f5f7fa;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-    }
-    h1 {
-      font-size: 1.8rem;
-      font-weight: 700;
-      color: #007acc;
-      margin-bottom: 10px;
-    }
-    #dbValue {
-      font-size: 4rem;
-      font-weight: 800;
-      margin: 10px 0;
-    }
-    #status {
-      font-size: 1.4rem;
-      font-weight: 600;
-      padding: 6px 18px;
-      border-radius: 12px;
-      margin-bottom: 15px;
-    }
-    .safe { background:#c6f6d5; color:#22543d; }
-    .warning { background:#fefcbf; color:#744210; }
-    .danger { background:#fed7d7; color:#742a2a; }
-
-    .controls button {
-      padding: 10px 16px;
-      margin: 6px;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 0.9rem;
-    }
-    .start { background:#38b2ac; color:white; }
-    .stop { background:#f56565; color:white; }
-    .reset { background:#718096; color:white; }
-
-    #graph {
-      width: 90%;
-      height: 150px;
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      margin-top: 20px;
-    }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title> Realtime Sound pollution Monitor (iOS Safe)</title>
+<style>
+  body{margin:0;background:#f5f7fa;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#111;display:grid;place-items:center;min-height:100vh}
+  .card{width:min(720px,94vw);background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.08);padding:24px;display:grid;gap:12px}
+  h1{margin:0 0 4px;color:#1565c0}
+  #db{font-size:clamp(40px,10vw,80px);font-weight:800;text-align:center}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center}
+  .badge{padding:6px 10px;border-radius:999px;font-weight:700;border:1px solid}
+  .safe{color:#14864a;border-color:#bce8d1;background:#e6f7ee}
+  .danger{color:#c62828;border-color:#f5b7b7;background:#fde8e8}
+  button{padding:10px 14px;border-radius:10px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-weight:700}
+  button:disabled{opacity:.6;cursor:not-allowed}
+  #log{background:#0b1222;color:#e5e7eb;font:12px/1.45 ui-monospace,Consolas,monospace;border-radius:10px;padding:10px;max-height:150px;overflow:auto;white-space:pre-wrap}
+</style>
 </head>
 <body>
+  <div class="card">
+    <h1>Realtime Sound pollution Monitor</h1>
+    <div id="db">-- dB --</div>
 
-  <h1>Realtime Noise Pollution Monitor</h1>
-  <div id="dbValue">-- dB</div>
-  <div id="status" class="safe">กำลังตรวจวัด...</div>
+    <div class="row">
+      <span id="status" class="badge safe">ปลอดภัย</span>
+      <span id="time" class="badge" style="border-color:#e5e7eb;background:#f8fafc;color:#334155">
+        เวลาที่อยู่ในเขตอันตรายทางเสียง: 00:00
+      </span>
+    </div>
 
-  <div class="controls">
-    <button class="start" onclick="startMeasure()">เริ่มวัดเสียง</button>
-    <button class="stop" onclick="stopMeasure()">หยุด</button>
-    <button class="reset" onclick="resetMeasure()">รีเซ็ต</button>
+    <div class="row">
+      <button id="start">เริ่มวัดเสียง</button>
+      <button id="stop" disabled>หยุด</button>
+      <button id="reset">รีเซ็ตเวลา</button>
+    </div>
+
+    <div id="msg" style="text-align:center;color:#c62828;font-weight:700"></div>
+    <div id="log"></div>
+    <small class="muted">
+      !!ถ้าไม่ขึ้นหน้าต่างขอสิทธิ์ไมค์: Settings → Safari → Advanced → Website Data → (ล้าง)!!
+    </small>
   </div>
 
-  <canvas id="graph"></canvas>
+<script>
+(() => {
+  const threshold = -30; // ปรับเกณฑ์ตามต้องการ
+  const dbEl = document.getElementById('db');
+  const statusEl = document.getElementById('status');
+  const timeEl = document.getElementById('time');
+  const startBtn = document.getElementById('start');
+  const stopBtn = document.getElementById('stop');
+  const resetBtn = document.getElementById('reset');
+  const msgEl = document.getElementById('msg');
+  const logEl = document.getElementById('log');
 
-  <script>
-    let audioContext, analyser, dataArray, source;
-    let rafId;
+  let audioCtx, analyser, source, stream;
+  let rafId = null;
+  let running = false;
 
-    const dbValue = document.getElementById("dbValue");
-    const statusBox = document.getElementById("status");
-    const canvas = document.getElementById("graph");
-    const ctx = canvas.getContext("2d");
+  // ตัวจับเวลาโซนอันตราย
+  let inDanger = false;
+  let dangerAccumMs = 0;
+  let lastDangerStart = null;
 
-    function updateStatus(db) {
-      if (db < 50) {
-        statusBox.textContent = "ปลอดภัย";
-        statusBox.className = "safe";
-      } else if (db < 80) {
-        statusBox.textContent = "ควรระวัง";
-        statusBox.className = "warning";
+  const L = (...a) => { const t = a.join(' '); logEl.textContent += t + '\n'; console.log(t); };
+
+  const fmt = (ms) => {
+    const sec = Math.floor(ms/1000);
+    const h = Math.floor(sec/3600);
+    const m = Math.floor((sec%3600)/60);
+    const s = sec%60;
+    return (h?String(h).padStart(2,'0')+':':'') + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  };
+
+  function updateDanger(now, db){
+    if (db > threshold) {
+      if (!inDanger) {
+        inDanger = true; lastDangerStart = now;
+        statusEl.textContent = 'อันตราย'; statusEl.className = 'badge danger';
       } else {
-        statusBox.textContent = "อันตราย!";
-        statusBox.className = "danger";
+        dangerAccumMs += (now - lastDangerStart);
+        lastDangerStart = now;
       }
+    } else {
+      if (inDanger) { dangerAccumMs += (now - lastDangerStart); }
+      inDanger = false;
+      statusEl.textContent = 'ปลอดภัย'; statusEl.className = 'badge safe';
     }
+    timeEl.textContent = 'เวลาสะสมในโซนอันตราย: ' + fmt(dangerAccumMs);
+  }
 
-    function drawGraph(db) {
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-      ctx.fillStyle = db < 50 ? "#48bb78" : db < 80 ? "#ecc94b" : "#f56565";
-      let barHeight = (db/120) * canvas.height;
-      ctx.fillRect(20, canvas.height - barHeight, canvas.width-40, barHeight);
-    }
+  function loop(){
+    if (!running) return;
+    const N = 1024;
+    const arr = new Float32Array(N);
+    analyser.getFloatTimeDomainData(arr);
 
-    function startMeasure() {
-      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-        audioContext = new AudioContext();
-        source = audioContext.createMediaStreamSource(stream);
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 512;
-        dataArray = new Uint8Array(analyser.frequencyBinCount);
-        source.connect(analyser);
-        loop();
+    let sum = 0;
+    for (let i=0;i<N;i++){ const v = arr[i]; sum += v*v; }
+    const rms = Math.sqrt(sum / N);       // 0..1
+    const db  = rms > 0 ? 20*Math.log10(rms) : -90; // dBFS (ลบเสมอ)
+
+    dbEl.textContent = db.toFixed(1) + ' dB';
+    updateDanger(performance.now(), db);
+
+    rafId = requestAnimationFrame(loop);
+  }
+
+  async function ensureResumed(){
+    try{
+      if (audioCtx && audioCtx.state === 'suspended'){
+        await audioCtx.resume();
+        L('AudioContext resumed');
+      }
+    }catch(e){ L('resume error:', e.name, e.message); }
+  }
+
+  async function start(){
+    msgEl.textContent = '';
+    try{
+      if (location.protocol !== 'https:'){
+        msgEl.textContent = 'ต้องใช้ผ่าน HTTPS (Pages ใช้ https อยู่แล้ว)';
+      }
+
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation:false, noiseSuppression:false, autoGainControl:false
+        }
       });
-    }
+      L('got stream');
 
-    function stopMeasure() {
-      if (audioContext) audioContext.close();
-      cancelAnimationFrame(rafId);
-      dbValue.textContent = "-- dB";
-      statusBox.textContent = "หยุดการตรวจวัด";
-      statusBox.className = "reset";
-    }
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      await ensureResumed();
 
-    function resetMeasure() {
-      dbValue.textContent = "-- dB";
-      statusBox.textContent = "รีเซ็ตเรียบร้อย";
-      statusBox.className = "safe";
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-    }
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
 
-    function loop() {
-      rafId = requestAnimationFrame(loop);
-      analyser.getByteFrequencyData(dataArray);
-      let values = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        values += dataArray[i];
-      }
-      let average = values / dataArray.length;
-      let db = Math.round((average/255)*120); // Normalize to 0–120 dB scale
-      dbValue.textContent = db + " dB";
-      updateStatus(db);
-      drawGraph(db);
+      source = audioCtx.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      running = true;
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+
+      loop();
+    }catch(err){
+      msgEl.textContent = '❌ ใช้ไมโครโฟนไม่ได้: ' + (err.name || '') + ' ' + (err.message || '');
+      L('getUserMedia error:', err.name, err.message);
     }
-  </script>
+  }
+
+  function stop(){
+    running = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (source) { try{ source.disconnect(); }catch{} }
+    if (analyser) { try{ analyser.disconnect?.(); }catch{} }
+    if (stream) { stream.getTracks().forEach(t => t.stop()); }
+    if (audioCtx) { try{ audioCtx.close(); }catch{} }
+    audioCtx = analyser = source = stream = null;
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    L('stopped');
+  }
+
+  // iOS: resume เมื่อกลับหน้า
+  document.addEventListener('visibilitychange', ensureResumed, false);
+  // iOS: บางครั้งต้อง bind กับ touchstart ด้วย
+  window.addEventListener('touchstart', ensureResumed, {passive:true});
+
+  startBtn.addEventListener('click', start);
+  stopBtn.addEventListener('click', stop);
+  resetBtn.addEventListener('click', () => {
+    dangerAccumMs = 0;
+    if (inDanger) lastDangerStart = performance.now();
+    timeEl.textContent = 'เวลาสะสมในโซนอันตราย: ' + fmt(dangerAccumMs);
+  });
+})();
+</script>
 </body>
 </html>
