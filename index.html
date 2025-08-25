@@ -5,95 +5,70 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Realtime Sound Pollution Monitor (iOS Safe)</title>
   <style>
-    body {
-      margin: 0;
-      background: linear-gradient(to bottom right, #e3f2fd, #ffffff);
-      font: 14px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      color: #111;
-      display: grid;
-      place-items: center;
-      min-height: 100vh;
+    :root{
+      --ink:#111; --muted:#667085;
+      --ok-bg:#e8f5e9; --ok:#2e7d32; 
+      --danger-bg:#ffebee; --danger:#c62828;
+      --chip-bg:#f6f7f9; --ring:#e0e0e0;
     }
-
-    .card {
-      width: min(720px, 94vw);
-      background: rgba(255, 255, 255, 0.7); /* พื้นหลังโปร่งใส */
-      border: 1px solid #e0e0e0;
-      border-radius: 16px;
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1);
-      padding: 20px;
-      display: grid;
-      gap: 12px;
-      backdrop-filter: blur(8px); /* เบลอพื้นหลัง */
+    /* ==== Layout (mobile-first) ==== */
+    body{
+      margin:0;
+      background:linear-gradient(160deg,#e3f2fd,#ffffff);
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      color:var(--ink);
+      display:grid; place-items:center;
+      min-height:100svh; padding:12px;
+      font-size:14px; line-height:1.55;
     }
-
-    h1 {
-      margin: 0 0 8px;
-      font-size: 20px;
-      text-align: center;
-      color: #1565c0;
+    .card{
+      width:min(640px,100%);
+      background:rgba(255,255,255,.75);
+      border:1px solid var(--ring);
+      border-radius:16px;
+      box-shadow:0 10px 26px rgba(0,0,0,.08);
+      padding:14px; display:grid; gap:10px;
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
     }
-
-    #db {
-      font-size: clamp(28px, 8vw, 50px);
-      font-weight: bold;
-      text-align: center;
+    h1{
+      margin:0;
+      text-align:center;
+      color:#1565c0;
+      font-weight:800;
+      font-size:clamp(16px,4.2vw,22px);
     }
-
-    .row {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: center;
+    #db{
+      text-align:center;
+      font-weight:800;
+      letter-spacing:.3px;
+      font-size:clamp(28px,10vw,48px);
     }
-
-    .badge {
-      padding: 4px 10px;
-      font-size: 13px;
-      border-radius: 999px;
-      font-weight: 600;
-      border: 1px solid;
+    .row{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; align-items:center}
+    .badge{
+      padding:6px 12px; border-radius:999px;
+      font-weight:700; font-size:12px; border:1px solid;
     }
-
-    .safe {
-      color: #2e7d32;
-      background: #e8f5e9;
-      border-color: #c8e6c9;
+    .safe{background:var(--ok-bg); color:var(--ok); border-color:#c8e6c9}
+    .danger{background:var(--danger-bg); color:var(--danger); border-color:#ef9a9a}
+    .chip{background:var(--chip-bg); color:#333; border-color:var(--ring)}
+    .btns{display:flex; gap:8px; flex-wrap:wrap; justify-content:center}
+    button{
+      appearance:none; border:1px solid var(--ring); background:#fff; color:#111;
+      padding:10px 14px; border-radius:10px; font-weight:700; font-size:13px;
+      min-height:44px; /* แตะง่ายบนมือถือ */
+      cursor:pointer;
     }
-
-    .danger {
-      color: #c62828;
-      background: #ffebee;
-      border-color: #ef9a9a;
-    }
-
-    button {
-      padding: 8px 12px;
-      font-size: 13px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      background: #fff;
-      cursor: pointer;
-      font-weight: 600;
-    }
-
-    button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    #msg {
-      color: red;
-      text-align: center;
-      font-size: 13px;
-    }
-
-    small {
-      text-align: center;
-      display: block;
-      font-size: 12px;
-      color: #666;
+    .primary{background:#0ea5e9; color:#fff; border:none}
+    .dangerBtn{background:#ef4444; color:#fff; border:none}
+    .ghost{background:#64748b; color:#fff; border:none}
+    button:disabled{opacity:.6; cursor:not-allowed}
+    #msg{color:#d92d20; text-align:center; font-size:12px; min-height:1.2em}
+    small{display:block; text-align:center; color:var(--muted); font-size:12px}
+    /* ==== iPad / ใหญ่ขึ้นเล็กน้อย ==== */
+    @media (min-width:768px){
+      .card{padding:18px; gap:12px}
+      button{font-size:14px}
     }
   </style>
 </head>
@@ -104,15 +79,13 @@
 
     <div class="row">
       <span id="status" class="badge safe">ปลอดภัย</span>
-      <span id="time" class="badge" style="border-color:#ccc;background:#f8f9fa;color:#333">
-        เวลาสะสมในโซนอันตราย: 00:00
-      </span>
+      <span id="time" class="badge chip">เวลาสะสมในโซนอันตราย: 00:00</span>
     </div>
 
-    <div class="row">
-      <button id="start">เริ่มวัดเสียง</button>
-      <button id="stop" disabled>หยุด</button>
-      <button id="reset">รีเซ็ตเวลา</button>
+    <div class="btns">
+      <button id="start" class="primary">เริ่มวัดเสียง</button>
+      <button id="stop"  class="dangerBtn" disabled>หยุด</button>
+      <button id="reset" class="ghost">รีเซ็ตเวลา</button>
     </div>
 
     <p id="msg"></p>
@@ -121,7 +94,10 @@
 
   <script>
     (() => {
-      const threshold = -45; // ปรับตามความเหมาะสม
+      // ค่าธรณี "อันตราย" (ใช้ dBFS ที่คำนวณจาก RMS — ค่าจะติดลบ)
+      const threshold = -45;
+
+      // DOM
       const dbEl = document.getElementById('db');
       const statusEl = document.getElementById('status');
       const timeEl = document.getElementById('time');
@@ -130,125 +106,87 @@
       const resetBtn = document.getElementById('reset');
       const msgEl = document.getElementById('msg');
 
-      let audioCtx, analyser, source, stream;
-      let rafId = null;
-      let running = false;
-
-      let inDanger = false;
-      let dangerAccumMs = 0;
-      let lastDangerStart = null;
+      // Audio state
+      let audioCtx, analyser, source, stream, rafId=null, running=false;
+      // Danger timer
+      let inDanger=false, dangerAccumMs=0, lastDangerStart=null;
 
       const fmt = (ms) => {
-        const sec = Math.floor(ms / 1000);
-        const m = Math.floor(sec / 60);
-        const s = sec % 60;
-        return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+        const s = Math.floor(ms/1000);
+        return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
       };
 
-      function updateDanger(now, db) {
-        if (db > threshold) {
-          if (!inDanger) {
-            inDanger = true;
-            lastDangerStart = now;
-            statusEl.textContent = 'อันตราย';
-            statusEl.className = 'badge danger';
-          } else {
-            dangerAccumMs += now - lastDangerStart;
-            lastDangerStart = now;
-          }
-        } else {
-          if (inDanger) {
-            dangerAccumMs += now - lastDangerStart;
-          }
-          inDanger = false;
-          statusEl.textContent = 'ปลอดภัย';
-          statusEl.className = 'badge safe';
+      function setStatus(db){
+        if (db > threshold){
+          if (!inDanger){ inDanger=true; lastDangerStart=performance.now(); }
+          statusEl.textContent='อันตราย'; statusEl.className='badge danger';
+        }else{
+          if (inDanger){ dangerAccumMs += performance.now()-lastDangerStart; }
+          inDanger=false;
+          statusEl.textContent='ปลอดภัย'; statusEl.className='badge safe';
         }
-        timeEl.textContent = 'เวลาสะสมในโซนอันตราย: ' + fmt(dangerAccumMs);
+        timeEl.textContent='เวลาสะสมในโซนอันตราย: ' + fmt(dangerAccumMs);
       }
 
-      function loop() {
+      function loop(){
         if (!running) return;
         const N = 1024;
-        const arr = new Float32Array(N);
-        analyser.getFloatTimeDomainData(arr);
+        const buf = new Float32Array(N);
+        analyser.getFloatTimeDomainData(buf);
 
-        let sum = 0;
-        for (let i = 0; i < N; i++) sum += arr[i] * arr[i];
-        const rms = Math.sqrt(sum / N);
-        const db = rms > 0 ? 20 * Math.log10(rms) : -90;
+        // RMS -> dBFS (ค่าติดลบ)
+        let sum=0; for(let i=0;i<N;i++) sum += buf[i]*buf[i];
+        const rms = Math.sqrt(sum/N);
+        const db  = rms>0 ? 20*Math.log10(rms) : -90;
 
-        dbEl.textContent = db.toFixed(1) + ' dB';
-        updateDanger(performance.now(), db);
-
+        dbEl.textContent = db.toFixed(1)+' dB';
+        setStatus(db);
         rafId = requestAnimationFrame(loop);
       }
 
-      async function ensureResumed() {
-        try {
-          if (audioCtx && audioCtx.state === 'suspended') {
-            await audioCtx.resume();
-          }
-        } catch {}
+      async function ensureResumed(){
+        try{ if(audioCtx && audioCtx.state==='suspended') await audioCtx.resume(); }catch{}
       }
 
-      async function start() {
-        msgEl.textContent = '';
-        try {
-          if (location.protocol !== 'https:') {
-            msgEl.textContent = 'ต้องใช้ผ่าน HTTPS';
-            return;
-          }
-
+      async function start(){
+        msgEl.textContent='';
+        try{
+          if (location.protocol!=='https:'){ msgEl.textContent='ต้องใช้ผ่าน HTTPS'; return; }
           stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false
-            }
+            audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false }
           });
-
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          audioCtx = new (window.AudioContext||window.webkitAudioContext)();
           await ensureResumed();
-
-          analyser = audioCtx.createAnalyser();
-          analyser.fftSize = 2048;
-
-          source = audioCtx.createMediaStreamSource(stream);
-          source.connect(analyser);
-
-          running = true;
-          startBtn.disabled = true;
-          stopBtn.disabled = false;
-
+          analyser = audioCtx.createAnalyser(); analyser.fftSize=2048;
+          source = audioCtx.createMediaStreamSource(stream); source.connect(analyser);
+          running=true; startBtn.disabled=true; stopBtn.disabled=false;
           loop();
-        } catch (err) {
-          msgEl.textContent = '❌ ใช้ไมโครโฟนไม่ได้: ' + (err.message || err.name);
+        }catch(err){
+          msgEl.textContent = '❌ ใช้ไมโครโฟนไม่ได้: ' + (err.message||err.name);
         }
       }
-
-      function stop() {
-        running = false;
-        if (rafId) cancelAnimationFrame(rafId);
-        if (source) try { source.disconnect(); } catch {}
-        if (analyser) try { analyser.disconnect?.(); } catch {}
-        if (stream) stream.getTracks().forEach(t => t.stop());
-        if (audioCtx) try { audioCtx.close(); } catch {}
-        audioCtx = analyser = source = stream = null;
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
+      function stop(){
+        running=false;
+        if(rafId) cancelAnimationFrame(rafId);
+        try{ source && source.disconnect(); }catch{} 
+        try{ analyser && analyser.disconnect?.(); }catch{}
+        try{ stream && stream.getTracks().forEach(t=>t.stop()); }catch{}
+        try{ audioCtx && audioCtx.close(); }catch{}
+        audioCtx=analyser=source=stream=null;
+        startBtn.disabled=false; stopBtn.disabled=true;
+      }
+      function reset(){
+        dangerAccumMs=0;
+        if(inDanger) lastDangerStart=performance.now();
+        timeEl.textContent='เวลาสะสมในโซนอันตราย: ' + fmt(dangerAccumMs);
       }
 
+      // Bind
       startBtn.addEventListener('click', start);
-      stopBtn.addEventListener('click', stop);
-      resetBtn.addEventListener('click', () => {
-        dangerAccumMs = 0;
-        if (inDanger) lastDangerStart = performance.now();
-        timeEl.textContent = 'เวลาสะสมในโซนอันตราย: ' + fmt(dangerAccumMs);
-      });
-
+      stopBtn .addEventListener('click', stop);
+      resetBtn.addEventListener('click', reset);
       document.addEventListener('visibilitychange', ensureResumed);
-      window.addEventListener('touchstart', ensureResumed, { passive: true });
+      window.addEventListener('touchstart', ensureResumed, {passive:true});
     })();
   </script>
 </body>
