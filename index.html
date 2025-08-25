@@ -1,22 +1,102 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Seround-sound — Test</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ตรวจจับเสียง</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 0; min-height: 100vh;
-           display: grid; place-items: center; background: linear-gradient(#ffe0d6,#fff); }
-    .card { background:#fff; padding:24px 28px; border:1px solid #eee; border-radius:12px;
-            box-shadow: 0 8px 24px rgba(0,0,0,.08); text-align:center; }
-    h1 { margin: 0 0 8px; }
-    p { margin: 0; opacity:.8 }
+    body {
+      background: #f5f7fa;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 {
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: #007acc;
+    }
+    #dbValue {
+      font-size: 4rem;
+      font-weight: 700;
+      margin: 20px 0;
+      color: #444;
+    }
+    #alert {
+      color: #d9534f;
+      font-weight: 700;
+      font-size: 1.5rem;
+      height: 2em;
+      margin-top: 10px;
+    }
+    footer {
+      position: fixed;
+      bottom: 10px;
+      font-size: 0.8rem;
+      color: #999;
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>มันขึ้นแล้ว! 🎉</h1>
-    <p>ไฟล์นี้คือ <strong>index.html</strong> ที่ root</p>
-  </div>
+  <h1>ตรวจจับระดับเสียง</h1>
+  <div id="dbValue">-- dB --</div>
+  <div id="alert"></div>
+  <footer>© 2025 โปรเจกต์ตรวจจับเสียง</footer>
+
+  <script>
+    const dbDisplay = document.getElementById('dbValue');
+    const alertDisplay = document.getElementById('alert');
+    const threshold = -30; // ปรับเกณฑ์เสียงดังตามต้องการ
+
+    async function startMonitoring() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const audioCtx = new AudioContext();
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+        source.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        function calculateDb() {
+          analyser.getByteTimeDomainData(dataArray);
+
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            const val = dataArray[i] - 128;
+            sum += val * val;
+          }
+          const rms = Math.sqrt(sum / dataArray.length);
+          const db = 20 * Math.log10(rms / 128);
+
+          dbDisplay.textContent = db.toFixed(1) + ' dB';
+
+          if (db > threshold) {
+            alertDisplay.textContent = '⚠️ เสียงดังเกินเกณฑ์!';
+          } else {
+            alertDisplay.textContent = '';
+          }
+
+          requestAnimationFrame(calculateDb);
+        }
+
+        calculateDb();
+      } catch (err) {
+        dbDisplay.textContent = 'ไม่สามารถเข้าถึงไมโครโฟนได้';
+        alertDisplay.textContent = '';
+        console.error(err);
+      }
+    }
+
+    startMonitoring();
+  </script>
 </body>
 </html>
