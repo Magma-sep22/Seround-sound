@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ตรวจจับเสียงแบบมินิมอล</title>
+  <style>
+    body {
+      background: #f5f7fa;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 {
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: #007acc;
+    }
+    #dbValue {
+      font-size: 4rem;
+      font-weight: 700;
+      margin: 20px 0;
+      color: #444;
+    }
+    #alert {
+      color: #d9534f;
+      font-weight: 700;
+      font-size: 1.5rem;
+      height: 2em;
+      margin-top: 10px;
+    }
+    footer {
+      position: fixed;
+      bottom: 10px;
+      font-size: 0.8rem;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+  <h1>ตรวจจับระดับเสียง</h1>
+  <div id="dbValue">-- dB --</div>
+  <div id="alert"></div>
+  <footer>© 2025 โปรเจกต์ตรวจจับเสียง</footer>
+
+  <script>
+    const dbDisplay = document.getElementById('dbValue');
+    const alertDisplay = document.getElementById('alert');
+    const threshold = -30; // ปรับเกณฑ์เสียงดังตามต้องการ
+
+    async function startMonitoring() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const audioCtx = new AudioContext();
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+        source.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        function calculateDb() {
+          analyser.getByteTimeDomainData(dataArray);
+
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            const val = dataArray[i] - 128;
+            sum += val * val;
+          }
+          const rms = Math.sqrt(sum / dataArray.length);
+          const db = 20 * Math.log10(rms / 128);
+
+          dbDisplay.textContent = db.toFixed(1) + ' dB';
+
+          if (db > threshold) {
+            alertDisplay.textContent = '⚠️ เสียงดังเกินเกณฑ์!';
+          } else {
+            alertDisplay.textContent = '';
+          }
+
+          requestAnimationFrame(calculateDb);
+        }
+
+        calculateDb();
+      } catch (err) {
+        dbDisplay.textContent = 'ไม่สามารถเข้าถึงไมโครโฟนได้';
+        alertDisplay.textContent = '';
+        console.error(err);
+      }
+    }
+
+    startMonitoring();
+  </script>
+</body>
+</html>
